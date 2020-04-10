@@ -276,6 +276,31 @@ TWPartition::~TWPartition(void) {
 	// Do nothing
 }
 
+static bool root_workout(string Mount_Point) {
+	string Path;
+	bool sts = false;
+	string mp = "/work";
+	if (TWFunc::mount_point_system(Path)) {
+		mkdir(mp.c_str(), 0777);
+		mount(Path.c_str(), mp.c_str(), "ext4", MS_RDONLY, NULL);
+		if (TWFunc::Path_Exists(mp + "/system") || Mount_Point.find("/system_root") != string::npos) {
+			property_set("ro.system.root", "true");
+			sts = true;
+			setenv("ANDROID_ROOT", "/system_root", 1);
+			LOGINFO("I: Detected system_root on path %s\n", Mount_Point.c_str());
+		}
+		else {
+			property_set("ro.system.root", "false");
+			sts = false;
+			setenv("ANDROID_ROOT", "/system", 1);
+		}
+		umount(mp.c_str());
+		rmdir(mp.c_str());
+	}
+	return sts;
+}
+
+
 bool TWPartition::Process_Fstab_Line(const char *fstab_line, bool Display_Error, std::map<string, Flags_Map> *twrp_flags) {
 	char full_line[MAX_FSTAB_LINE_LENGTH];
 	char twflags[MAX_FSTAB_LINE_LENGTH] = "";
@@ -315,6 +340,12 @@ bool TWPartition::Process_Fstab_Line(const char *fstab_line, bool Display_Error,
 				additional_entry = PartitionManager.Find_Partition_By_Path(Mount_Point);
 				if (additional_entry) {
 					LOGINFO("Found an additional entry for '%s'\n", Mount_Point.c_str());
+				}
+			}
+			if (Mount_Point == "/system" || Mount_Point == "/system_root" || Mount_Point == "/") {
+				if (root_workout(Mount_Point)) {
+					Mount_Point = "/system_root";
+					Make_Dir("/system", false);
 				}
 			}
 			LOGINFO("Processing '%s'\n", Mount_Point.c_str());
